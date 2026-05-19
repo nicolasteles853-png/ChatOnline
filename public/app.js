@@ -118,8 +118,44 @@ let selectedMessageId = null;
 const rtcConfig = {
   iceServers: [
     {
+      urls: [
+        "stun:stun.l.google.com:19302",
+        "stun:stun1.l.google.com:19302",
+        "stun:stun2.l.google.com:19302"
+      ]
+    },
+
+    {
       urls:
-        "stun:stun.l.google.com:19302"
+        "turn:openrelay.metered.ca:80",
+
+      username:
+        "openrelayproject",
+
+      credential:
+        "openrelayproject"
+    },
+
+    {
+      urls:
+        "turn:openrelay.metered.ca:443",
+
+      username:
+        "openrelayproject",
+
+      credential:
+        "openrelayproject"
+    },
+
+    {
+      urls:
+        "turn:openrelay.metered.ca:443?transport=tcp",
+
+      username:
+        "openrelayproject",
+
+      credential:
+        "openrelayproject"
     }
   ]
 };
@@ -129,7 +165,13 @@ function updateSendButton() {
   const text =
     messageInputEl.value.trim();
 
-  if (text.length > 0) {
+  const file =
+    mediaInputEl.files[0];
+
+  if (
+    text.length > 0 ||
+    file
+  ) {
 
     sendBtn.innerText = "➤";
 
@@ -362,6 +404,7 @@ function createMessage(msg, isOwn) {
 
     audio.src = msg.audio;
     audio.controls = true;
+    audio.autoplay = false;
 
     media.appendChild(audio);
 
@@ -746,6 +789,31 @@ async function createPeer() {
       }
     };
 
+  peerConnection.onconnectionstatechange =
+    function() {
+
+      if (
+        peerConnection
+      ) {
+
+        if (
+          peerConnection.connectionState ===
+          "disconnected"
+        ) {
+
+          endCall();
+        }
+
+        if (
+          peerConnection.connectionState ===
+          "failed"
+        ) {
+
+          endCall();
+        }
+      }
+    };
+
   peerConnection.ontrack =
     function(event) {
 
@@ -761,6 +829,9 @@ async function createPeer() {
         remoteAudio.autoplay =
           true;
 
+        remoteAudio.controls =
+          false;
+
         document.body.appendChild(
           remoteAudio
         );
@@ -768,13 +839,19 @@ async function createPeer() {
 
       remoteAudio.srcObject =
         event.streams[0];
+
+      remoteAudio.play();
     };
 
   localStream =
     await navigator
     .mediaDevices
     .getUserMedia({
-      audio: true
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true
+      }
     });
 
   localStream
@@ -816,18 +893,28 @@ function endCall() {
 
   if (remoteAudio) {
 
+    remoteAudio.pause();
+
+    remoteAudio.srcObject =
+      null;
+
     remoteAudio.remove();
 
     remoteAudio = null;
   }
 
-  socket.emit(
-    "call_ended",
-    {
-      to:
-        currentCallUser
-    }
-  );
+  if (
+    currentCallUser
+  ) {
+
+    socket.emit(
+      "call_ended",
+      {
+        to:
+          currentCallUser
+      }
+    );
+  }
 
   currentCallUser =
     null;
@@ -852,7 +939,9 @@ async function callVoice() {
 
   const offer =
     await peerConnection
-    .createOffer();
+    .createOffer({
+      offerToReceiveAudio: true
+    });
 
   await peerConnection
   .setLocalDescription(
@@ -864,8 +953,10 @@ async function callVoice() {
     {
       to:
         activeChatId,
+
       type:
         "voice",
+
       offer:
         offer
     }
@@ -907,14 +998,27 @@ messageInputEl
   }
 );
 
+mediaInputEl
+.addEventListener(
+  "change",
+  function() {
+
+    updateSendButton();
+  }
+);
+
 sendBtn.onclick =
   async function() {
 
   const text =
     messageInputEl.value.trim();
 
+  const file =
+    mediaInputEl.files[0];
+
   if (
-    text.length > 0
+    text.length > 0 ||
+    file
   ) {
 
     sendMessage();
@@ -1311,8 +1415,10 @@ socket.on(
       {
         to:
           data.from.id,
+
         accepted:
           true,
+
         answer:
           answer
       }
@@ -1437,49 +1543,11 @@ socket.on(
   }
 );
 
-socket.on(
-  "connect_error",
+callBtn.onclick =
   function() {
 
-    statusTextEl.innerText =
-      "Servidor offline";
-  }
-);
-
-socket.on(
-  "reconnect",
-  function() {
-
-    socket.emit(
-      "login",
-      {
-        id:
-          userId,
-
-        username:
-          username,
-
-        avatar:
-          avatar
-      }
-    );
-  }
-);
-
-socket.on(
-  "auth_error",
-  function(data) {
-
-    alert(
-      data.message ||
-      "Erro login"
-    );
-
-    localStorage.clear();
-
-    location.href = "/";
-  }
-);
+  callVoice();
+};
 
 updateCallButton();
 updateSendButton();
