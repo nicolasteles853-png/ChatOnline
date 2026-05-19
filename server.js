@@ -14,10 +14,21 @@ const server =
 const io =
   socketIo(server, {
     cors: {
-      origin: "*"
+      origin: "*",
+      methods: [
+        "GET",
+        "POST"
+      ]
     },
+    transports: [
+      "websocket",
+      "polling"
+    ],
+    allowEIO3: true,
     maxHttpBufferSize:
-      1e8
+      1e8,
+    pingTimeout: 60000,
+    pingInterval: 25000
   });
 
 const PUBLIC_DIR =
@@ -38,16 +49,53 @@ const MESSAGES_FILE =
     "messages.json"
   );
 
+app.use(express.json({
+  limit: "100mb"
+}));
+
+app.use(express.urlencoded({
+  extended: true,
+  limit: "100mb"
+}));
+
 app.use(
   express.static(PUBLIC_DIR)
 );
 
 let users = {};
 let messages = [];
-
 let clients = {};
 
+async function ensureFile(file, data) {
+
+  try {
+
+    await fs.access(file);
+
+  } catch(e) {
+
+    await fs.writeFile(
+      file,
+      JSON.stringify(
+        data,
+        null,
+        2
+      )
+    );
+  }
+}
+
 async function loadFiles() {
+
+  await ensureFile(
+    USERS_FILE,
+    {}
+  );
+
+  await ensureFile(
+    MESSAGES_FILE,
+    []
+  );
 
   try {
 
@@ -63,15 +111,6 @@ async function loadFiles() {
   } catch(e) {
 
     users = {};
-
-    await fs.writeFile(
-      USERS_FILE,
-      JSON.stringify(
-        users,
-        null,
-        2
-      )
-    );
   }
 
   try {
@@ -88,6 +127,38 @@ async function loadFiles() {
   } catch(e) {
 
     messages = [];
+  }
+
+  if (
+    !Array.isArray(messages)
+  ) {
+
+    messages = [];
+  }
+}
+
+async function saveUsers() {
+
+  try {
+
+    await fs.writeFile(
+      USERS_FILE,
+      JSON.stringify(
+        users,
+        null,
+        2
+      )
+    );
+
+  } catch(e) {
+
+    console.log(e);
+  }
+}
+
+async function saveMessages() {
+
+  try {
 
     await fs.writeFile(
       MESSAGES_FILE,
@@ -97,31 +168,11 @@ async function loadFiles() {
         2
       )
     );
+
+  } catch(e) {
+
+    console.log(e);
   }
-}
-
-async function saveUsers() {
-
-  await fs.writeFile(
-    USERS_FILE,
-    JSON.stringify(
-      users,
-      null,
-      2
-    )
-  );
-}
-
-async function saveMessages() {
-
-  await fs.writeFile(
-    MESSAGES_FILE,
-    JSON.stringify(
-      messages,
-      null,
-      2
-    )
-  );
 }
 
 function getOnlineUsers() {
@@ -133,10 +184,15 @@ function getOnlineUsers() {
 
     const u = clients[id];
 
+    if (!u) return;
+
     const exists =
       list.find(function(x) {
-        return x.id === u.id;
-      });
+
+      return (
+        x.id === u.id
+      );
+    });
 
     if (!exists) {
 
@@ -163,6 +219,7 @@ function getSocketByUserId(id) {
   .forEach(function(sid) {
 
     if (
+      clients[sid] &&
       clients[sid].id === id
     ) {
 
@@ -186,140 +243,230 @@ io.on(
     "login",
     async function(data) {
 
-    if (!data) return;
+    try {
 
-    const userId =
-      data.id;
+      if (!data) {
 
-    const username =
-      data.username;
+        socket.emit(
+          "auth_error",
+          {
+            message:
+              "Dados inválidos"
+          }
+        );
 
-    const avatar =
-      data.avatar;
+        return;
+      }
 
-    if (
-      !userId ||
-      !username ||
-      !avatar
-    ) {
+      const userId =
+        String(
+          data.id || ""
+        );
+
+      const username =
+        String(
+          data.username || ""
+        );
+
+      const avatar =
+        String(
+          data.avatar || ""
+        );
+
+      if (
+        !userId ||
+        !username ||
+        !avatar
+      ) {
+
+        socket.emit(
+          "auth_error",
+          {
+            message:
+              "Dados inválidos"
+          }
+        );
+
+        return;
+      }
+
+      users[userId] = {
+        username:
+          username,
+        avatar:
+          avatar
+      };
+
+      await saveUsers();
+
+      clients[socket.id] = {
+        id: userId,
+        username:
+          username,
+        avatar:
+          avatar
+      };
+
+      socket.emit(
+        "auth_success",
+        {
+          userId:
+            userId,
+          username:
+            username,
+          avatar:
+            avatar
+        }
+      );
+
+      socket.emit(
+        "messages_history",
+        messages
+      );
+
+      io.emit(
+        "users_list",
+        getOnlineUsers()
+      );
+
+    } catch(e) {
+
+      console.log(e);
 
       socket.emit(
         "auth_error",
         {
           message:
-            "Dados inválidos"
+            "Erro no login"
         }
       );
-
-      return;
     }
-
-    users[userId] = {
-      username:
-        username,
-      avatar:
-        avatar
-    };
-
-    await saveUsers();
-
-    clients[socket.id] = {
-      id: userId,
-      username:
-        username,
-      avatar:
-        avatar
-    };
-
-    socket.emit(
-      "auth_success",
-      {
-        userId:
-          userId,
-        username:
-          username,
-        avatar:
-          avatar
-      }
-    );
-
-    socket.emit(
-      "messages_history",
-      messages
-    );
-
-    io.emit(
-      "users_list",
-      getOnlineUsers()
-    );
   });
 
   socket.on(
     "send_message",
     async function(data) {
 
-    const from =
-      clients[socket.id];
+    try {
 
-    if (!from) return;
+      const from =
+        clients[socket.id];
 
-    const msg = {
-      id:
-        Date.now()
-        .toString() +
-        "_" +
-        Math.random()
-        .toString(36)
-        .substring(2, 8),
+      if (!from)
+        return;
 
-      from:
-        from.id,
+      const msg = {
+        id:
+          Date.now()
+          .toString() +
+          "_" +
+          Math.random()
+          .toString(36)
+          .substring(2, 8),
 
-      username:
-        from.username,
+        from:
+          from.id,
 
-      avatar:
-        from.avatar,
+        username:
+          from.username,
 
-      to:
-        data.to || null,
+        avatar:
+          from.avatar,
 
-      text:
-        data.text || "",
+        to:
+          data.to || null,
 
-      image:
-        data.image || null,
+        text:
+          data.text || "",
 
-      video:
-        data.video || null,
+        image:
+          data.image || null,
 
-      audio:
-        data.audio || null,
+        video:
+          data.video || null,
 
-      timestamp:
-        Date.now()
-    };
+        audio:
+          data.audio || null,
 
-    const exists =
-      messages.find(
-        function(m) {
-
-        return (
-          m.id === msg.id
-        );
-      });
-
-    if (!exists) {
+        timestamp:
+          Date.now()
+      };
 
       messages.push(msg);
 
-      await saveMessages();
-    }
+      if (
+        messages.length > 1000
+      ) {
 
-    io.emit(
-      "message",
-      msg
-    );
+        messages =
+          messages.slice(-1000);
+      }
+
+      await saveMessages();
+
+      io.emit(
+        "message",
+        msg
+      );
+
+    } catch(e) {
+
+      console.log(e);
+    }
+  });
+
+  socket.on(
+    "delete_message",
+    async function(data) {
+
+    try {
+
+      const from =
+        clients[socket.id];
+
+      if (!from)
+        return;
+
+      const msg =
+        messages.find(
+          function(m) {
+
+          return (
+            m.id === data.id
+          );
+        });
+
+      if (!msg)
+        return;
+
+      if (
+        msg.from !==
+        from.id
+      ) return;
+
+      messages =
+        messages.filter(
+          function(m) {
+
+          return (
+            m.id !==
+            data.id
+          );
+        });
+
+      await saveMessages();
+
+      io.emit(
+        "message_deleted",
+        {
+          id: data.id
+        }
+      );
+
+    } catch(e) {
+
+      console.log(e);
+    }
   });
 
   socket.on(
@@ -329,7 +476,8 @@ io.on(
     const from =
       clients[socket.id];
 
-    if (!from) return;
+    if (!from)
+      return;
 
     const targetSocket =
       getSocketByUserId(
@@ -343,7 +491,8 @@ io.on(
     .emit(
       "typing",
       {
-        from: from.id,
+        from:
+          from.id,
         username:
           from.username,
         to:
@@ -359,7 +508,8 @@ io.on(
     const from =
       clients[socket.id];
 
-    if (!from) return;
+    if (!from)
+      return;
 
     const targetSocket =
       getSocketByUserId(
@@ -401,7 +551,8 @@ io.on(
     const from =
       clients[socket.id];
 
-    if (!from) return;
+    if (!from)
+      return;
 
     const targetSocket =
       getSocketByUserId(
@@ -443,7 +594,8 @@ io.on(
     const from =
       clients[socket.id];
 
-    if (!from) return;
+    if (!from)
+      return;
 
     const targetSocket =
       getSocketByUserId(
@@ -476,7 +628,8 @@ io.on(
     const from =
       clients[socket.id];
 
-    if (!from) return;
+    if (!from)
+      return;
 
     const targetSocket =
       getSocketByUserId(
@@ -511,6 +664,11 @@ io.on(
       "users_list",
       getOnlineUsers()
     );
+
+    console.log(
+      "Desconectado:",
+      socket.id
+    );
   });
 });
 
@@ -538,6 +696,15 @@ app.get(
   );
 });
 
+app.get(
+  "/health",
+  function(req, res) {
+
+  res.json({
+    status: "ok"
+  });
+});
+
 loadFiles()
 .then(function() {
 
@@ -547,10 +714,11 @@ loadFiles()
 
   server.listen(
     PORT,
+    "0.0.0.0",
     function() {
 
     console.log(
-      "Servidor rodando em http://localhost:" +
+      "Servidor rodando na porta " +
       PORT
     );
   });

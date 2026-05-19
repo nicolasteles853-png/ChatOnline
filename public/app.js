@@ -1,6 +1,12 @@
 // app.js
 
-const socket = io();
+const socket = io({
+  transports: ["websocket", "polling"],
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  timeout: 20000
+});
 
 let userId = localStorage.getItem("userId");
 let username = localStorage.getItem("username");
@@ -417,6 +423,15 @@ document.onclick =
 
 function sendMessage() {
 
+  if (!socket.connected) {
+
+    alert(
+      "Servidor offline"
+    );
+
+    return;
+  }
+
   const text =
     messageInputEl.value.trim();
 
@@ -451,6 +466,18 @@ function sendMessage() {
   }
 
   if (file) {
+
+    if (
+      file.size >
+      15 * 1024 * 1024
+    ) {
+
+      alert(
+        "Arquivo muito grande"
+      );
+
+      return;
+    }
 
     const reader =
       new FileReader();
@@ -620,54 +647,54 @@ async function stopRecordingAndSend() {
         }
       );
 
-    const reader =
-      new FileReader();
+      const reader =
+        new FileReader();
 
-    reader.onload =
-      function() {
+      reader.onload =
+        function() {
 
-      socket.emit(
-        "send_message",
-        {
-          to:
-            activeChatId,
-          text: "",
-          image: null,
-          video: null,
-          audio:
-            reader.result
-        }
+        socket.emit(
+          "send_message",
+          {
+            to:
+              activeChatId,
+            text: "",
+            image: null,
+            video: null,
+            audio:
+              reader.result
+          }
+        );
+      };
+
+      reader.readAsDataURL(
+        blob
       );
+
+      if (
+        recordingStream
+      ) {
+
+        recordingStream
+        .getTracks()
+        .forEach(
+          function(track) {
+
+          track.stop();
+        });
+      }
+
+      audioChunks = [];
+
+      isRecording = false;
+
+      cancelRecordBtn.style.display =
+        "none";
+
+      updateSendButton();
     };
 
-    reader.readAsDataURL(
-      blob
-    );
-
-    if (
-      recordingStream
-    ) {
-
-      recordingStream
-      .getTracks()
-      .forEach(
-        function(track) {
-
-        track.stop();
-      });
-    }
-
-    audioChunks = [];
-
-    isRecording = false;
-
-    cancelRecordBtn.style.display =
-      "none";
-
-    updateSendButton();
-  };
-
-  mediaRecorder.stop();
+    mediaRecorder.stop();
 }
 
 function updateCallButton() {
@@ -1382,16 +1409,75 @@ socket.on(
   "connect",
   function() {
 
+    statusTextEl.innerText =
+      "Online";
+
     socket.emit(
       "login",
       {
-        id: userId,
+        id:
+          userId,
+
         username:
           username,
+
         avatar:
           avatar
       }
     );
+  }
+);
+
+socket.on(
+  "disconnect",
+  function() {
+
+    statusTextEl.innerText =
+      "Reconectando...";
+  }
+);
+
+socket.on(
+  "connect_error",
+  function() {
+
+    statusTextEl.innerText =
+      "Servidor offline";
+  }
+);
+
+socket.on(
+  "reconnect",
+  function() {
+
+    socket.emit(
+      "login",
+      {
+        id:
+          userId,
+
+        username:
+          username,
+
+        avatar:
+          avatar
+      }
+    );
+  }
+);
+
+socket.on(
+  "auth_error",
+  function(data) {
+
+    alert(
+      data.message ||
+      "Erro login"
+    );
+
+    localStorage.clear();
+
+    location.href = "/";
   }
 );
 

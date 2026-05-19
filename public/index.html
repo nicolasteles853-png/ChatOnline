@@ -228,129 +228,169 @@
 
   </div>
 
-  <script>
+<!-- index.html -->
 
-    const socket = io();
+<script>
 
-    let userId =
-      localStorage.getItem("userId") ||
-      "usr_" + Date.now();
+const socket = io({
+  transports: [
+    "websocket",
+    "polling"
+  ],
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000
+});
 
-    let username =
-      localStorage.getItem("username") || "";
+let userId =
+  localStorage.getItem("userId") ||
+  "usr_" +
+  Date.now() +
+  "_" +
+  Math.floor(
+    Math.random() *
+    999999
+  );
 
-    let avatar =
-      localStorage.getItem("avatar") || "";
+let username =
+  localStorage.getItem("username") ||
+  "";
 
-    if (username) {
-      document.getElementById(
-        "usernameInput"
-      ).value = username;
-    }
+let avatar =
+  localStorage.getItem("avatar") ||
+  "";
 
-    if (avatar) {
-      document.getElementById(
-        "avatarImg"
-      ).src = avatar;
-    }
+if (username) {
 
-    function atualizarAvatar() {
+  document.getElementById(
+    "usernameInput"
+  ).value = username;
+}
 
-      const file =
-        document.getElementById(
-          "avatarFile"
-        ).files[0];
+if (avatar) {
 
-      if (!file) return;
+  document.getElementById(
+    "avatarImg"
+  ).src = avatar;
+}
 
-      const reader = new FileReader();
+function atualizarAvatar() {
 
-      reader.onload = function(e) {
+  const file =
+    document.getElementById(
+      "avatarFile"
+    ).files[0];
 
-        avatar = e.target.result;
+  if (!file)
+    return;
 
-        document.getElementById(
-          "avatarImg"
-        ).src = avatar;
+  const reader =
+    new FileReader();
 
-        localStorage.setItem(
-          "avatar",
-          avatar
-        );
-      };
+  reader.onload =
+    function(e) {
 
-      reader.readAsDataURL(file);
-    }
+    avatar =
+      e.target.result;
 
+    document.getElementById(
+      "avatarImg"
+    ).src = avatar;
+
+    localStorage.setItem(
+      "avatar",
+      avatar
+    );
+  };
+
+  reader.readAsDataURL(
+    file
+  );
+}
+
+document
+.getElementById(
+  "avatarFile"
+)
+.addEventListener(
+  "change",
+  atualizarAvatar
+);
+
+function atualizarLogin() {
+
+  username =
     document
-      .getElementById("avatarFile")
-      .addEventListener(
-        "change",
-        atualizarAvatar
-      );
+    .getElementById(
+      "usernameInput"
+    )
+    .value
+    .trim();
 
-    function atualizarLogin() {
+  if (!username) {
 
-      username =
-        document.getElementById(
-          "usernameInput"
-        ).value.trim();
+    document.getElementById(
+      "errorMsg"
+    ).innerText =
+      "Digite um nome";
 
-      if (!username) {
+    return;
+  }
 
-        document.getElementById(
-          "errorMsg"
-        ).innerText = "Digite um nome";
+  avatar =
+    document.getElementById(
+      "avatarImg"
+    ).src;
 
-        return;
-      }
+  localStorage.setItem(
+    "userId",
+    userId
+  );
 
-      avatar =
-        document.getElementById(
-          "avatarImg"
-        ).src;
+  localStorage.setItem(
+    "username",
+    username
+  );
 
-      localStorage.setItem(
-        "userId",
-        userId
-      );
+  localStorage.setItem(
+    "avatar",
+    avatar
+  );
 
-      localStorage.setItem(
-        "username",
-        username
-      );
-
-      localStorage.setItem(
-        "avatar",
+  socket.emit(
+    "login",
+    {
+      id:
+        userId,
+      username:
+        username,
+      avatar:
         avatar
-      );
-
-      socket.emit("login", {
-        id:userId,
-        username:username,
-        avatar:avatar
-      });
     }
+  );
+}
 
-    socket.on(
-      "auth_success",
-      function() {
+socket.on(
+  "auth_success",
+  function() {
 
-        window.location.href = "/chat";
-      }
-    );
+    window.location.href =
+      "/chat";
+  }
+);
 
-    socket.on(
-      "auth_error",
-      function(data) {
+socket.on(
+  "auth_error",
+  function(data) {
 
-        document.getElementById(
-          "errorMsg"
-        ).innerText = data.message;
-      }
-    );
+    document.getElementById(
+      "errorMsg"
+    ).innerText =
+      data.message;
+  }
+);
 
-  </script>
+</script>
 
 </body>
 </html>
