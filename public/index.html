@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Chat Premium</title>
+
+  <script src="/socket.io/socket.io.js"></script>
+
+  <style>
+
+    :root{
+      --bg:#0f172a;
+      --card:#1e293b;
+      --primary:#6366f1;
+      --secondary:#8b5cf6;
+      --text:#f8fafc;
+      --border:#334155;
+    }
+
+    *{
+      margin:0;
+      padding:0;
+      box-sizing:border-box;
+    }
+
+    body{
+      min-height:100vh;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      background:linear-gradient(
+        135deg,
+        #020617,
+        #0f172a
+      );
+      font-family:Arial,sans-serif;
+      overflow:hidden;
+    }
+
+    .bg{
+      position:fixed;
+      inset:0;
+      z-index:-1;
+    }
+
+    .circle{
+      position:absolute;
+      border-radius:50%;
+      filter:blur(60px);
+      background:rgba(99,102,241,.25);
+    }
+
+    .circle:nth-child(1){
+      width:300px;
+      height:300px;
+      top:-100px;
+      left:-100px;
+    }
+
+    .circle:nth-child(2){
+      width:250px;
+      height:250px;
+      bottom:-100px;
+      right:-100px;
+    }
+
+    .login{
+      width:90%;
+      max-width:400px;
+      background:rgba(30,41,59,.95);
+      border:1px solid var(--border);
+      border-radius:25px;
+      padding:30px;
+      box-shadow:0 20px 50px rgba(0,0,0,.4);
+      animation:show .5s ease;
+    }
+
+    @keyframes show{
+      from{
+        opacity:0;
+        transform:translateY(40px);
+      }
+      to{
+        opacity:1;
+        transform:translateY(0);
+      }
+    }
+
+    h1{
+      text-align:center;
+      color:white;
+      font-size:30px;
+      margin-bottom:10px;
+    }
+
+    .sub{
+      text-align:center;
+      color:#94a3b8;
+      margin-bottom:25px;
+    }
+
+    .avatar-box{
+      width:90px;
+      height:90px;
+      margin:auto;
+      border-radius:50%;
+      overflow:hidden;
+      border:3px solid var(--primary);
+      cursor:pointer;
+    }
+
+    .avatar-box img{
+      width:100%;
+      height:100%;
+      object-fit:cover;
+    }
+
+    #avatarFile{
+      display:none;
+    }
+
+    .change-avatar{
+      text-align:center;
+      color:#cbd5e1;
+      margin-top:10px;
+      margin-bottom:20px;
+      cursor:pointer;
+    }
+
+    input{
+      width:100%;
+      height:50px;
+      border:none;
+      outline:none;
+      border-radius:14px;
+      padding:0 15px;
+      margin-bottom:15px;
+      background:#0f172a;
+      color:white;
+      border:1px solid var(--border);
+      font-size:16px;
+    }
+
+    input:focus{
+      border-color:var(--primary);
+    }
+
+    button{
+      width:100%;
+      height:50px;
+      border:none;
+      border-radius:14px;
+      background:linear-gradient(
+        90deg,
+        var(--primary),
+        var(--secondary)
+      );
+      color:white;
+      font-size:17px;
+      font-weight:bold;
+      cursor:pointer;
+    }
+
+    .error{
+      color:#f87171;
+      text-align:center;
+      margin-bottom:15px;
+    }
+
+  </style>
+</head>
+
+<body>
+
+  <div class="bg">
+    <div class="circle"></div>
+    <div class="circle"></div>
+  </div>
+
+  <div class="login">
+
+    <h1>Chat Premium</h1>
+
+    <div class="sub">
+      Entre na sua conta
+    </div>
+
+    <label for="avatarFile">
+
+      <div class="avatar-box" id="avatarPreview">
+
+        <img
+          src="https://ui-avatars.com/api/?name=User&background=6366f1&color=fff"
+          id="avatarImg"
+        >
+
+      </div>
+
+    </label>
+
+    <div class="change-avatar">
+      Alterar avatar
+    </div>
+
+    <input
+      type="file"
+      id="avatarFile"
+      accept="image/*"
+    >
+
+    <input
+      type="text"
+      id="usernameInput"
+      placeholder="Digite seu nome"
+    >
+
+    <div class="error" id="errorMsg"></div>
+
+    <button onclick="atualizarLogin()">
+      Continuar
+    </button>
+
+  </div>
+
+  <script>
+
+    const socket = io();
+
+    let userId =
+      localStorage.getItem("userId") ||
+      "usr_" + Date.now();
+
+    let username =
+      localStorage.getItem("username") || "";
+
+    let avatar =
+      localStorage.getItem("avatar") || "";
+
+    if (username) {
+      document.getElementById(
+        "usernameInput"
+      ).value = username;
+    }
+
+    if (avatar) {
+      document.getElementById(
+        "avatarImg"
+      ).src = avatar;
+    }
+
+    function atualizarAvatar() {
+
+      const file =
+        document.getElementById(
+          "avatarFile"
+        ).files[0];
+
+      if (!file) return;
+
+      const reader = new FileReader();
+
+      reader.onload = function(e) {
+
+        avatar = e.target.result;
+
+        document.getElementById(
+          "avatarImg"
+        ).src = avatar;
+
+        localStorage.setItem(
+          "avatar",
+          avatar
+        );
+      };
+
+      reader.readAsDataURL(file);
+    }
+
+    document
+      .getElementById("avatarFile")
+      .addEventListener(
+        "change",
+        atualizarAvatar
+      );
+
+    function atualizarLogin() {
+
+      username =
+        document.getElementById(
+          "usernameInput"
+        ).value.trim();
+
+      if (!username) {
+
+        document.getElementById(
+          "errorMsg"
+        ).innerText = "Digite um nome";
+
+        return;
+      }
+
+      avatar =
+        document.getElementById(
+          "avatarImg"
+        ).src;
+
+      localStorage.setItem(
+        "userId",
+        userId
+      );
+
+      localStorage.setItem(
+        "username",
+        username
+      );
+
+      localStorage.setItem(
+        "avatar",
+        avatar
+      );
+
+      socket.emit("login", {
+        id:userId,
+        username:username,
+        avatar:avatar
+      });
+    }
+
+    socket.on(
+      "auth_success",
+      function() {
+
+        window.location.href = "/chat";
+      }
+    );
+
+    socket.on(
+      "auth_error",
+      function(data) {
+
+        document.getElementById(
+          "errorMsg"
+        ).innerText = data.message;
+      }
+    );
+
+  </script>
+
+</body>
+</html>
