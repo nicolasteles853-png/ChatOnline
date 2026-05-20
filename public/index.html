@@ -113,6 +113,7 @@
       overflow:hidden;
       border:3px solid var(--primary);
       cursor:pointer;
+      background:#111827;
     }
 
     .avatar-box img{
@@ -171,6 +172,7 @@
       color:#f87171;
       text-align:center;
       margin-bottom:15px;
+      min-height:20px;
     }
 
   </style>
@@ -193,7 +195,10 @@
 
     <label for="avatarFile">
 
-      <div class="avatar-box" id="avatarPreview">
+      <div
+        class="avatar-box"
+        id="avatarPreview"
+      >
 
         <img
           src="https://ui-avatars.com/api/?name=User&background=6366f1&color=fff"
@@ -218,17 +223,22 @@
       type="text"
       id="usernameInput"
       placeholder="Digite seu nome"
+      maxlength="20"
     >
 
-    <div class="error" id="errorMsg"></div>
+    <div
+      class="error"
+      id="errorMsg"
+    ></div>
 
-    <button onclick="atualizarLogin()">
+    <button
+      id="loginBtn"
+      onclick="atualizarLogin()"
+    >
       Continuar
     </button>
 
   </div>
-
-<!-- index.html -->
 
 <script>
 
@@ -237,13 +247,22 @@ const socket = io({
     "websocket",
     "polling"
   ],
+
   reconnection: true,
-  reconnectionAttempts: Infinity,
-  reconnectionDelay: 1000
+
+  reconnectionAttempts:
+    Infinity,
+
+  reconnectionDelay:
+    1000,
+
+  timeout: 20000
 });
 
 let userId =
-  localStorage.getItem("userId") ||
+  localStorage.getItem(
+    "userId"
+  ) ||
   "usr_" +
   Date.now() +
   "_" +
@@ -253,36 +272,70 @@ let userId =
   );
 
 let username =
-  localStorage.getItem("username") ||
-  "";
+  localStorage.getItem(
+    "username"
+  ) || "";
 
 let avatar =
-  localStorage.getItem("avatar") ||
-  "";
+  localStorage.getItem(
+    "avatar"
+  ) || "";
+
+const usernameInput =
+  document.getElementById(
+    "usernameInput"
+  );
+
+const avatarImg =
+  document.getElementById(
+    "avatarImg"
+  );
+
+const avatarFile =
+  document.getElementById(
+    "avatarFile"
+  );
+
+const errorMsg =
+  document.getElementById(
+    "errorMsg"
+  );
+
+const loginBtn =
+  document.getElementById(
+    "loginBtn"
+  );
 
 if (username) {
 
-  document.getElementById(
-    "usernameInput"
-  ).value = username;
+  usernameInput.value =
+    username;
 }
 
 if (avatar) {
 
-  document.getElementById(
-    "avatarImg"
-  ).src = avatar;
+  avatarImg.src =
+    avatar;
 }
 
 function atualizarAvatar() {
 
   const file =
-    document.getElementById(
-      "avatarFile"
-    ).files[0];
+    avatarFile.files[0];
 
   if (!file)
     return;
+
+  if (
+    file.size >
+    10 * 1024 * 1024
+  ) {
+
+    errorMsg.innerText =
+      "Imagem muito grande";
+
+    return;
+  }
 
   const reader =
     new FileReader();
@@ -293,9 +346,8 @@ function atualizarAvatar() {
     avatar =
       e.target.result;
 
-    document.getElementById(
-      "avatarImg"
-    ).src = avatar;
+    avatarImg.src =
+      avatar;
 
     localStorage.setItem(
       "avatar",
@@ -308,10 +360,7 @@ function atualizarAvatar() {
   );
 }
 
-document
-.getElementById(
-  "avatarFile"
-)
+avatarFile
 .addEventListener(
   "change",
   atualizarAvatar
@@ -320,27 +369,39 @@ document
 function atualizarLogin() {
 
   username =
-    document
-    .getElementById(
-      "usernameInput"
-    )
+    usernameInput
     .value
     .trim();
 
   if (!username) {
 
-    document.getElementById(
-      "errorMsg"
-    ).innerText =
+    errorMsg.innerText =
       "Digite um nome";
 
     return;
   }
 
+  if (
+    username.length < 2
+  ) {
+
+    errorMsg.innerText =
+      "Nome muito curto";
+
+    return;
+  }
+
+  loginBtn.disabled =
+    true;
+
+  loginBtn.innerText =
+    "Entrando...";
+
+  errorMsg.innerText =
+    "";
+
   avatar =
-    document.getElementById(
-      "avatarImg"
-    ).src;
+    avatarImg.src;
 
   localStorage.setItem(
     "userId",
@@ -362,13 +423,53 @@ function atualizarLogin() {
     {
       id:
         userId,
+
       username:
         username,
+
       avatar:
         avatar
     }
   );
 }
+
+usernameInput
+.addEventListener(
+  "keypress",
+  function(e) {
+
+    if (
+      e.key === "Enter"
+    ) {
+
+      atualizarLogin();
+    }
+  }
+);
+
+socket.on(
+  "connect",
+  function() {
+
+    errorMsg.innerText =
+      "";
+  }
+);
+
+socket.on(
+  "connect_error",
+  function() {
+
+    loginBtn.disabled =
+      false;
+
+    loginBtn.innerText =
+      "Continuar";
+
+    errorMsg.innerText =
+      "Servidor offline";
+  }
+);
 
 socket.on(
   "auth_success",
@@ -383,10 +484,15 @@ socket.on(
   "auth_error",
   function(data) {
 
-    document.getElementById(
-      "errorMsg"
-    ).innerText =
-      data.message;
+    loginBtn.disabled =
+      false;
+
+    loginBtn.innerText =
+      "Continuar";
+
+    errorMsg.innerText =
+      data.message ||
+      "Erro ao entrar";
   }
 );
 
