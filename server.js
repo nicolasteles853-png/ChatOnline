@@ -1,4 +1,4 @@
-// server.js COMPLETO
+// server.js
 
 const express = require("express");
 const http = require("http");
@@ -70,11 +70,15 @@ app.use(
 );
 
 app.use(
-  express.static(PUBLIC_DIR)
+  express.static(
+    PUBLIC_DIR
+  )
 );
 
 let users = {};
+
 let messages = [];
+
 let clients = {};
 
 async function ensureFile(
@@ -84,7 +88,9 @@ async function ensureFile(
 
   try {
 
-    await fs.access(file);
+    await fs.access(
+      file
+    );
 
   } catch(e) {
 
@@ -120,7 +126,9 @@ async function loadFiles() {
       );
 
     users =
-      JSON.parse(usersRaw);
+      JSON.parse(
+        usersRaw
+      );
 
   } catch(e) {
 
@@ -136,7 +144,9 @@ async function loadFiles() {
       );
 
     messages =
-      JSON.parse(msgRaw);
+      JSON.parse(
+        msgRaw
+      );
 
   } catch(e) {
 
@@ -144,7 +154,9 @@ async function loadFiles() {
   }
 
   if (
-    !Array.isArray(messages)
+    !Array.isArray(
+      messages
+    )
   ) {
 
     messages = [];
@@ -193,42 +205,47 @@ function getOnlineUsers() {
 
   const list = [];
 
-  Object.keys(clients)
-  .forEach(function(id) {
+  Object.keys(
+    clients
+  )
+  .forEach(
+    function(id) {
 
-    const u =
-      clients[id];
+      const u =
+        clients[id];
 
-    if (!u)
-      return;
+      if (!u)
+        return;
 
-    const exists =
-      list.find(
-        function(x) {
+      const exists =
+        list.find(
+          function(x) {
 
-        return (
-          x.id ===
-          u.id
+            return (
+              x.id ===
+              u.id
+            );
+          }
         );
-      });
 
-    if (!exists) {
+      if (!exists) {
 
-      list.push({
-        id:
-          u.id,
+        list.push({
+          id:
+            u.id,
 
-        username:
-          u.username,
+          username:
+            u.username,
 
-        avatar:
-          u.avatar,
+          avatar:
+            u.avatar,
 
-        status:
-          "online"
-      });
+          status:
+            "online"
+        });
+      }
     }
-  });
+  );
 
   return list;
 }
@@ -237,20 +254,25 @@ function getSocketByUserId(
   id
 ) {
 
-  let result = null;
+  let result =
+    null;
 
-  Object.keys(clients)
-  .forEach(function(sid) {
+  Object.keys(
+    clients
+  )
+  .forEach(
+    function(sid) {
 
-    if (
-      clients[sid] &&
-      clients[sid].id ===
-      id
-    ) {
+      if (
+        clients[sid] &&
+        clients[sid]
+        .id === id
+      ) {
 
-      result = sid;
+        result = sid;
+      }
     }
-  });
+  );
 
   return result;
 }
@@ -259,504 +281,587 @@ io.on(
   "connection",
   function(socket) {
 
-  console.log(
-    "Conectado:",
-    socket.id
-  );
-
-  socket.on(
-    "login",
-    async function(data) {
-
-    try {
-
-      if (!data)
-        return;
-
-      const userId =
-        String(
-          data.id || ""
-        );
-
-      const username =
-        String(
-          data.username || ""
-        );
-
-      const avatar =
-        String(
-          data.avatar || ""
-        );
-
-      if (
-        !userId ||
-        !username
-      ) {
-
-        return;
-      }
-
-      users[userId] = {
-        username:
-          username,
-
-        avatar:
-          avatar
-      };
-
-      await saveUsers();
-
-      clients[socket.id] = {
-        id:
-          userId,
-
-        username:
-          username,
-
-        avatar:
-          avatar
-      };
-
-      socket.emit(
-        "messages_history",
-        messages
-      );
-
-      io.emit(
-        "users_list",
-        getOnlineUsers()
-      );
-
-    } catch(e) {
-
-      console.log(e);
-    }
-  });
-
-  socket.on(
-    "send_message",
-    async function(data) {
-
-    try {
-
-      const from =
-        clients[socket.id];
-
-      if (!from)
-        return;
-
-      const msg = {
-        id:
-          Date.now()
-          .toString() +
-          "_" +
-          Math.random()
-          .toString(36)
-          .substring(2, 8),
-
-        from:
-          from.id,
-
-        username:
-          from.username,
-
-        avatar:
-          from.avatar,
-
-        to:
-          data.to || null,
-
-        text:
-          data.text || "",
-
-        image:
-          data.image || null,
-
-        video:
-          data.video || null,
-
-        audio:
-          data.audio || null,
-
-        timestamp:
-          Date.now()
-      };
-
-      messages.push(msg);
-
-      if (
-        messages.length >
-        1000
-      ) {
-
-        messages =
-          messages.slice(
-            -1000
-          );
-      }
-
-      await saveMessages();
-
-      io.emit(
-        "message",
-        msg
-      );
-
-    } catch(e) {
-
-      console.log(e);
-    }
-  });
-
-  socket.on(
-    "delete_message",
-    async function(data) {
-
-    try {
-
-      const from =
-        clients[socket.id];
-
-      if (!from)
-        return;
-
-      const msg =
-        messages.find(
-          function(m) {
-
-          return (
-            m.id ===
-            data.id
-          );
-        });
-
-      if (!msg)
-        return;
-
-      if (
-        msg.from !==
-        from.id
-      ) {
-
-        return;
-      }
-
-      messages =
-        messages.filter(
-          function(m) {
-
-          return (
-            m.id !==
-            data.id
-          );
-        });
-
-      await saveMessages();
-
-      io.emit(
-        "message_deleted",
-        {
-          id:
-            data.id
-        }
-      );
-
-    } catch(e) {
-
-      console.log(e);
-    }
-  });
-
-  socket.on(
-    "typing",
-    function(data) {
-
-    const from =
-      clients[socket.id];
-
-    if (!from)
-      return;
-
-    const targetSocket =
-      getSocketByUserId(
-        data.to
-      );
-
-    if (!targetSocket)
-      return;
-
-    io.to(targetSocket)
-    .emit(
-      "typing",
-      {
-        from:
-          from.id,
-
-        username:
-          from.username,
-
-        to:
-          data.to
-      }
-    );
-  });
-
-  socket.on(
-    "call_request",
-    function(data) {
-
-    try {
-
-      const from =
-        clients[socket.id];
-
-      if (!from)
-        return;
-
-      const targetSocket =
-        getSocketByUserId(
-          data.to
-        );
-
-      if (!targetSocket)
-        return;
-
-      io.to(
-        targetSocket
-      ).emit(
-        "call_request",
-        {
-          from: {
-            id:
-              from.id,
-
-            username:
-              from.username,
-
-            avatar:
-              from.avatar
-          },
-
-          to:
-            data.to,
-
-          type:
-            data.type,
-
-          offer:
-            data.offer
-        }
-      );
-
-    } catch(e) {
-
-      console.log(e);
-    }
-  });
-
-  socket.on(
-    "call_response",
-    function(data) {
-
-    try {
-
-      const from =
-        clients[socket.id];
-
-      if (!from)
-        return;
-
-      const targetSocket =
-        getSocketByUserId(
-          data.to
-        );
-
-      if (!targetSocket)
-        return;
-
-      io.to(
-        targetSocket
-      ).emit(
-        "call_response",
-        {
-          from: {
-            id:
-              from.id,
-
-            username:
-              from.username,
-
-            avatar:
-              from.avatar
-          },
-
-          to:
-            data.to,
-
-          accepted:
-            data.accepted,
-
-          answer:
-            data.answer
-        }
-      );
-
-    } catch(e) {
-
-      console.log(e);
-    }
-  });
-
-  socket.on(
-    "ice_candidate",
-    function(data) {
-
-    try {
-
-      const from =
-        clients[socket.id];
-
-      if (!from)
-        return;
-
-      const targetSocket =
-        getSocketByUserId(
-          data.to
-        );
-
-      if (!targetSocket)
-        return;
-
-      io.to(
-        targetSocket
-      ).emit(
-        "ice_candidate",
-        {
-          from:
-            from.id,
-
-          to:
-            data.to,
-
-          candidate:
-            data.candidate
-        }
-      );
-
-    } catch(e) {
-
-      console.log(e);
-    }
-  });
-
-  socket.on(
-    "call_ended",
-    function(data) {
-
-    try {
-
-      const from =
-        clients[socket.id];
-
-      if (!from)
-        return;
-
-      const targetSocket =
-        getSocketByUserId(
-          data.to
-        );
-
-      if (!targetSocket)
-        return;
-
-      io.to(
-        targetSocket
-      ).emit(
-        "call_ended",
-        {
-          from:
-            from.id,
-
-          to:
-            data.to
-        }
-      );
-
-    } catch(e) {
-
-      console.log(e);
-    }
-  });
-
-  socket.on(
-    "disconnect",
-    function() {
-
-    delete clients[
-      socket.id
-    ];
-
-    io.emit(
-      "users_list",
-      getOnlineUsers()
-    );
-
     console.log(
-      "Desconectado:",
+      "Conectado:",
       socket.id
     );
-  });
-});
+
+    socket.on(
+      "login",
+      function(data) {
+
+        try {
+
+          if (!data) {
+
+            socket.emit(
+              "auth_error",
+              {
+                message:
+                  "Dados inválidos"
+              }
+            );
+
+            return;
+          }
+
+          const userId =
+            String(
+              data.id ||
+              ""
+            );
+
+          const username =
+            String(
+              data.username ||
+              ""
+            );
+
+          const avatar =
+            String(
+              data.avatar ||
+              ""
+            );
+
+          if (
+            !userId ||
+            !username
+          ) {
+
+            socket.emit(
+              "auth_error",
+              {
+                message:
+                  "Dados inválidos"
+              }
+            );
+
+            return;
+          }
+
+          users[userId] = {
+            username:
+              username,
+
+            avatar:
+              avatar
+          };
+
+          clients[socket.id] = {
+            id:
+              userId,
+
+            username:
+              username,
+
+            avatar:
+              avatar
+          };
+
+          socket.emit(
+            "auth_success",
+            {
+              userId:
+                userId,
+
+              username:
+                username,
+
+              avatar:
+                avatar
+            }
+          );
+
+          socket.emit(
+            "messages_history",
+            messages
+          );
+
+          io.emit(
+            "users_list",
+            getOnlineUsers()
+          );
+
+          saveUsers();
+
+        } catch(e) {
+
+          console.log(e);
+
+          socket.emit(
+            "auth_error",
+            {
+              message:
+                "Erro no login"
+            }
+          );
+        }
+      }
+    );
+
+    socket.on(
+      "send_message",
+      async function(data) {
+
+        try {
+
+          const from =
+            clients[
+              socket.id
+            ];
+
+          if (!from)
+            return;
+
+          const msg = {
+            id:
+              Date.now()
+              .toString() +
+              "_" +
+              Math.random()
+              .toString(36)
+              .substring(
+                2,
+                8
+              ),
+
+            from:
+              from.id,
+
+            username:
+              from.username,
+
+            avatar:
+              from.avatar,
+
+            to:
+              data.to ||
+              null,
+
+            text:
+              data.text ||
+              "",
+
+            image:
+              data.image ||
+              null,
+
+            video:
+              data.video ||
+              null,
+
+            audio:
+              data.audio ||
+              null,
+
+            timestamp:
+              Date.now()
+          };
+
+          messages.push(
+            msg
+          );
+
+          if (
+            messages.length >
+            1000
+          ) {
+
+            messages =
+              messages.slice(
+                -1000
+              );
+          }
+
+          io.emit(
+            "message",
+            msg
+          );
+
+          saveMessages();
+
+        } catch(e) {
+
+          console.log(e);
+        }
+      }
+    );
+
+    socket.on(
+      "delete_message",
+      async function(data) {
+
+        try {
+
+          const from =
+            clients[
+              socket.id
+            ];
+
+          if (!from)
+            return;
+
+          const msg =
+            messages.find(
+              function(m) {
+
+                return (
+                  m.id ===
+                  data.id
+                );
+              }
+            );
+
+          if (!msg)
+            return;
+
+          if (
+            msg.from !==
+            from.id
+          ) {
+
+            return;
+          }
+
+          messages =
+            messages.filter(
+              function(m) {
+
+                return (
+                  m.id !==
+                  data.id
+                );
+              }
+            );
+
+          io.emit(
+            "message_deleted",
+            {
+              id:
+                data.id
+            }
+          );
+
+          saveMessages();
+
+        } catch(e) {
+
+          console.log(e);
+        }
+      }
+    );
+
+    socket.on(
+      "typing",
+      function(data) {
+
+        const from =
+          clients[
+            socket.id
+          ];
+
+        if (!from)
+          return;
+
+        const targetSocket =
+          getSocketByUserId(
+            data.to
+          );
+
+        if (
+          !targetSocket
+        ) {
+
+          return;
+        }
+
+        io.to(
+          targetSocket
+        )
+        .emit(
+          "typing",
+          {
+            from:
+              from.id,
+
+            username:
+              from.username,
+
+            to:
+              data.to
+          }
+        );
+      }
+    );
+
+    socket.on(
+      "call_request",
+      function(data) {
+
+        const from =
+          clients[
+            socket.id
+          ];
+
+        if (!from)
+          return;
+
+        const targetSocket =
+          getSocketByUserId(
+            data.to
+          );
+
+        if (
+          !targetSocket
+        ) {
+
+          return;
+        }
+
+        io.to(
+          targetSocket
+        )
+        .emit(
+          "call_request",
+          {
+            from: {
+              id:
+                from.id,
+
+              username:
+                from.username,
+
+              avatar:
+                from.avatar
+            },
+
+            to:
+              data.to,
+
+            type:
+              data.type,
+
+            offer:
+              data.offer
+          }
+        );
+      }
+    );
+
+    socket.on(
+      "call_response",
+      function(data) {
+
+        const from =
+          clients[
+            socket.id
+          ];
+
+        if (!from)
+          return;
+
+        const targetSocket =
+          getSocketByUserId(
+            data.to
+          );
+
+        if (
+          !targetSocket
+        ) {
+
+          return;
+        }
+
+        io.to(
+          targetSocket
+        )
+        .emit(
+          "call_response",
+          {
+            from: {
+              id:
+                from.id,
+
+              username:
+                from.username,
+
+              avatar:
+                from.avatar
+            },
+
+            to:
+              data.to,
+
+            accepted:
+              data.accepted,
+
+            answer:
+              data.answer
+          }
+        );
+      }
+    );
+
+    socket.on(
+      "ice_candidate",
+      function(data) {
+
+        const from =
+          clients[
+            socket.id
+          ];
+
+        if (!from)
+          return;
+
+        const targetSocket =
+          getSocketByUserId(
+            data.to
+          );
+
+        if (
+          !targetSocket
+        ) {
+
+          return;
+        }
+
+        io.to(
+          targetSocket
+        )
+        .emit(
+          "ice_candidate",
+          {
+            from:
+              from.id,
+
+            to:
+              data.to,
+
+            candidate:
+              data.candidate
+          }
+        );
+      }
+    );
+
+    socket.on(
+      "call_ended",
+      function(data) {
+
+        const from =
+          clients[
+            socket.id
+          ];
+
+        if (!from)
+          return;
+
+        const targetSocket =
+          getSocketByUserId(
+            data.to
+          );
+
+        if (
+          !targetSocket
+        ) {
+
+          return;
+        }
+
+        io.to(
+          targetSocket
+        )
+        .emit(
+          "call_ended",
+          {
+            from:
+              from.id,
+
+            to:
+              data.to
+          }
+        );
+      }
+    );
+
+    socket.on(
+      "disconnect",
+      function() {
+
+        delete clients[
+          socket.id
+        ];
+
+        io.emit(
+          "users_list",
+          getOnlineUsers()
+        );
+
+        console.log(
+          "Desconectado:",
+          socket.id
+        );
+      }
+    );
+  }
+);
 
 app.get(
   "/",
   function(req, res) {
 
-  res.sendFile(
-    path.join(
-      PUBLIC_DIR,
-      "index.html"
-    )
-  );
-});
+    res.sendFile(
+      path.join(
+        PUBLIC_DIR,
+        "index.html"
+      )
+    );
+  }
+);
 
 app.get(
   "/chat",
   function(req, res) {
 
-  res.sendFile(
-    path.join(
-      PUBLIC_DIR,
-      "chat.html"
-    )
-  );
-});
+    res.sendFile(
+      path.join(
+        PUBLIC_DIR,
+        "chat.html"
+      )
+    );
+  }
+);
 
 app.get(
   "/health",
   function(req, res) {
 
-  res.json({
-    status:
-      "ok"
-  });
-});
+    res.json({
+      status:
+        "ok"
+    });
+  }
+);
 
 loadFiles()
-.then(function() {
+.then(
+  function() {
 
-  const PORT =
-    process.env.PORT ||
-    3000;
+    const PORT =
+      process.env.PORT ||
+      3000;
 
-  server.listen(
-    PORT,
-    "0.0.0.0",
-    function() {
+    server.listen(
+      PORT,
+      "0.0.0.0",
+      function() {
 
-    console.log(
-      "Servidor rodando na porta " +
-      PORT
+        console.log(
+          "Servidor rodando na porta " +
+          PORT
+        );
+      }
     );
-  });
-});
+  }
+);
