@@ -69,6 +69,8 @@ let audioChunks = [];
 let recordingStream = null;
 let isRecording = false;
 
+let pendingCandidates = [];
+
 const cancelRecordBtn =
   document.createElement("button");
 
@@ -126,30 +128,11 @@ const rtcConfig = {
     },
 
     {
-      urls:
+      urls: [
         "turn:openrelay.metered.ca:80",
-
-      username:
-        "openrelayproject",
-
-      credential:
-        "openrelayproject"
-    },
-
-    {
-      urls:
         "turn:openrelay.metered.ca:443",
-
-      username:
-        "openrelayproject",
-
-      credential:
-        "openrelayproject"
-    },
-
-    {
-      urls:
-        "turn:openrelay.metered.ca:443?transport=tcp",
+        "turn:openrelay.metered.ca:443?transport=tcp"
+      ],
 
       username:
         "openrelayproject",
@@ -157,7 +140,9 @@ const rtcConfig = {
       credential:
         "openrelayproject"
     }
-  ]
+  ],
+
+  iceCandidatePoolSize: 10
 };
 
 function updateSendButton() {
@@ -404,7 +389,6 @@ function createMessage(msg, isOwn) {
 
     audio.src = msg.audio;
     audio.controls = true;
-    audio.autoplay = false;
 
     media.appendChild(audio);
 
@@ -765,6 +749,8 @@ function updateCallButton() {
 
 async function createPeer() {
 
+  pendingCandidates = [];
+
   peerConnection =
     new RTCPeerConnection(
       rtcConfig
@@ -789,31 +775,6 @@ async function createPeer() {
       }
     };
 
-  peerConnection.onconnectionstatechange =
-    function() {
-
-      if (
-        peerConnection
-      ) {
-
-        if (
-          peerConnection.connectionState ===
-          "disconnected"
-        ) {
-
-          endCall();
-        }
-
-        if (
-          peerConnection.connectionState ===
-          "failed"
-        ) {
-
-          endCall();
-        }
-      }
-    };
-
   peerConnection.ontrack =
     function(event) {
 
@@ -829,8 +790,11 @@ async function createPeer() {
         remoteAudio.autoplay =
           true;
 
-        remoteAudio.controls =
-          false;
+        remoteAudio.playsInline =
+          true;
+
+        remoteAudio.volume =
+          1;
 
         document.body.appendChild(
           remoteAudio
@@ -840,7 +804,33 @@ async function createPeer() {
       remoteAudio.srcObject =
         event.streams[0];
 
-      remoteAudio.play();
+      remoteAudio.play()
+      .catch(function() {});
+    };
+
+  peerConnection.onconnectionstatechange =
+    function() {
+
+      if (
+        peerConnection
+      ) {
+
+        if (
+          peerConnection.connectionState ===
+          "failed"
+        ) {
+
+          endCall();
+        }
+
+        if (
+          peerConnection.connectionState ===
+          "disconnected"
+        ) {
+
+          endCall();
+        }
+      }
     };
 
   localStream =
@@ -851,18 +841,47 @@ async function createPeer() {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true
-      }
+      },
+
+      video: false
     });
 
   localStream
   .getTracks()
   .forEach(function(track) {
 
+    track.enabled = true;
+
     peerConnection.addTrack(
       track,
       localStream
     );
   });
+}
+
+async function addPendingCandidates() {
+
+  for (
+    let i = 0;
+    i < pendingCandidates.length;
+    i++
+  ) {
+
+    try {
+
+      await peerConnection
+      .addIceCandidate(
+        new RTCIceCandidate(
+          pendingCandidates[i]
+        )
+      );
+
+    } catch(e) {
+
+    }
+  }
+
+  pendingCandidates = [];
 }
 
 function endCall() {
@@ -872,6 +891,12 @@ function endCall() {
   updateCallButton();
 
   if (peerConnection) {
+
+    peerConnection.ontrack =
+      null;
+
+    peerConnection.onicecandidate =
+      null;
 
     peerConnection.close();
 
@@ -903,9 +928,13 @@ function endCall() {
     remoteAudio = null;
   }
 
-  if (
-    currentCallUser
-  ) {
+  currentCallUser =
+    null;
+}
+
+async function callVoice() {
+
+  if (inCall) {
 
     socket.emit(
       "call_ended",
@@ -914,15 +943,6 @@ function endCall() {
           currentCallUser
       }
     );
-  }
-
-  currentCallUser =
-    null;
-}
-
-async function callVoice() {
-
-  if (inCall) {
 
     endCall();
 
@@ -940,7 +960,8 @@ async function callVoice() {
   const offer =
     await peerConnection
     .createOffer({
-      offerToReceiveAudio: true
+      offerToReceiveAudio:
+        true
     });
 
   await peerConnection
@@ -1380,6 +1401,7 @@ socket.on(
         {
           to:
             data.from.id,
+
           accepted:
             false
         }
@@ -1396,6 +1418,8 @@ socket.on(
         data.offer
       )
     );
+
+    await addPendingCandidates();
 
     const answer =
       await peerConnection
@@ -1457,6 +1481,8 @@ socket.on(
       )
     );
 
+    await addPendingCandidates();
+
     inCall = true;
 
     updateCallButton();
@@ -1492,21 +1518,36 @@ socket.on(
 
     if (
       data.to !==
-      userId ||
+      userId
+    ) return;
+
+    if (
       !peerConnection
     ) return;
 
-    try {
+    if (
+      peerConnection.remoteDescription &&
+      peerConnection.remoteDescription.type
+    ) {
 
-      await peerConnection
-      .addIceCandidate(
-        new RTCIceCandidate(
-          data.candidate
-        )
+      try {
+
+        await peerConnection
+        .addIceCandidate(
+          new RTCIceCandidate(
+            data.candidate
+          )
+        );
+
+      } catch(e) {
+
+      }
+
+    } else {
+
+      pendingCandidates.push(
+        data.candidate
       );
-
-    } catch(e) {
-
     }
   }
 );
