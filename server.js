@@ -1,4 +1,4 @@
-// server.js
+// server.js COMPLETO
 
 const express = require("express");
 const http = require("http");
@@ -20,15 +20,22 @@ const io =
         "POST"
       ]
     },
+
     transports: [
       "websocket",
       "polling"
     ],
+
     allowEIO3: true,
+
     maxHttpBufferSize:
       1e8,
-    pingTimeout: 60000,
-    pingInterval: 25000
+
+    pingTimeout:
+      60000,
+
+    pingInterval:
+      25000
   });
 
 const PUBLIC_DIR =
@@ -49,14 +56,18 @@ const MESSAGES_FILE =
     "messages.json"
   );
 
-app.use(express.json({
-  limit: "100mb"
-}));
+app.use(
+  express.json({
+    limit: "100mb"
+  })
+);
 
-app.use(express.urlencoded({
-  extended: true,
-  limit: "100mb"
-}));
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "100mb"
+  })
+);
 
 app.use(
   express.static(PUBLIC_DIR)
@@ -66,7 +77,10 @@ let users = {};
 let messages = [];
 let clients = {};
 
-async function ensureFile(file, data) {
+async function ensureFile(
+  file,
+  data
+) {
 
   try {
 
@@ -182,26 +196,34 @@ function getOnlineUsers() {
   Object.keys(clients)
   .forEach(function(id) {
 
-    const u = clients[id];
+    const u =
+      clients[id];
 
-    if (!u) return;
+    if (!u)
+      return;
 
     const exists =
-      list.find(function(x) {
+      list.find(
+        function(x) {
 
-      return (
-        x.id === u.id
-      );
-    });
+        return (
+          x.id ===
+          u.id
+        );
+      });
 
     if (!exists) {
 
       list.push({
-        id: u.id,
+        id:
+          u.id,
+
         username:
           u.username,
+
         avatar:
           u.avatar,
+
         status:
           "online"
       });
@@ -211,7 +233,9 @@ function getOnlineUsers() {
   return list;
 }
 
-function getSocketByUserId(id) {
+function getSocketByUserId(
+  id
+) {
 
   let result = null;
 
@@ -220,7 +244,8 @@ function getSocketByUserId(id) {
 
     if (
       clients[sid] &&
-      clients[sid].id === id
+      clients[sid].id ===
+      id
     ) {
 
       result = sid;
@@ -245,18 +270,8 @@ io.on(
 
     try {
 
-      if (!data) {
-
-        socket.emit(
-          "auth_error",
-          {
-            message:
-              "Dados inválidos"
-          }
-        );
-
+      if (!data)
         return;
-      }
 
       const userId =
         String(
@@ -275,17 +290,8 @@ io.on(
 
       if (
         !userId ||
-        !username ||
-        !avatar
+        !username
       ) {
-
-        socket.emit(
-          "auth_error",
-          {
-            message:
-              "Dados inválidos"
-          }
-        );
 
         return;
       }
@@ -293,6 +299,7 @@ io.on(
       users[userId] = {
         username:
           username,
+
         avatar:
           avatar
       };
@@ -300,24 +307,15 @@ io.on(
       await saveUsers();
 
       clients[socket.id] = {
-        id: userId,
+        id:
+          userId,
+
         username:
           username,
+
         avatar:
           avatar
       };
-
-      socket.emit(
-        "auth_success",
-        {
-          userId:
-            userId,
-          username:
-            username,
-          avatar:
-            avatar
-        }
-      );
 
       socket.emit(
         "messages_history",
@@ -332,14 +330,6 @@ io.on(
     } catch(e) {
 
       console.log(e);
-
-      socket.emit(
-        "auth_error",
-        {
-          message:
-            "Erro no login"
-        }
-      );
     }
   });
 
@@ -395,11 +385,14 @@ io.on(
       messages.push(msg);
 
       if (
-        messages.length > 1000
+        messages.length >
+        1000
       ) {
 
         messages =
-          messages.slice(-1000);
+          messages.slice(
+            -1000
+          );
       }
 
       await saveMessages();
@@ -432,7 +425,8 @@ io.on(
           function(m) {
 
           return (
-            m.id === data.id
+            m.id ===
+            data.id
           );
         });
 
@@ -442,7 +436,10 @@ io.on(
       if (
         msg.from !==
         from.id
-      ) return;
+      ) {
+
+        return;
+      }
 
       messages =
         messages.filter(
@@ -459,7 +456,8 @@ io.on(
       io.emit(
         "message_deleted",
         {
-          id: data.id
+          id:
+            data.id
         }
       );
 
@@ -493,8 +491,10 @@ io.on(
       {
         from:
           from.id,
+
         username:
           from.username,
+
         to:
           data.to
       }
@@ -505,151 +505,187 @@ io.on(
     "call_request",
     function(data) {
 
-    const from =
-      clients[socket.id];
+    try {
 
-    if (!from)
-      return;
+      const from =
+        clients[socket.id];
 
-    const targetSocket =
-      getSocketByUserId(
-        data.to
+      if (!from)
+        return;
+
+      const targetSocket =
+        getSocketByUserId(
+          data.to
+        );
+
+      if (!targetSocket)
+        return;
+
+      io.to(
+        targetSocket
+      ).emit(
+        "call_request",
+        {
+          from: {
+            id:
+              from.id,
+
+            username:
+              from.username,
+
+            avatar:
+              from.avatar
+          },
+
+          to:
+            data.to,
+
+          type:
+            data.type,
+
+          offer:
+            data.offer
+        }
       );
 
-    if (!targetSocket)
-      return;
+    } catch(e) {
 
-    io.to(targetSocket)
-    .emit(
-      "call_request",
-      {
-        from: {
-          id:
-            from.id,
-          username:
-            from.username,
-          avatar:
-            from.avatar
-        },
-
-        to:
-          data.to,
-
-        type:
-          data.type,
-
-        offer:
-          data.offer
-      }
-    );
+      console.log(e);
+    }
   });
 
   socket.on(
     "call_response",
     function(data) {
 
-    const from =
-      clients[socket.id];
+    try {
 
-    if (!from)
-      return;
+      const from =
+        clients[socket.id];
 
-    const targetSocket =
-      getSocketByUserId(
-        data.to
+      if (!from)
+        return;
+
+      const targetSocket =
+        getSocketByUserId(
+          data.to
+        );
+
+      if (!targetSocket)
+        return;
+
+      io.to(
+        targetSocket
+      ).emit(
+        "call_response",
+        {
+          from: {
+            id:
+              from.id,
+
+            username:
+              from.username,
+
+            avatar:
+              from.avatar
+          },
+
+          to:
+            data.to,
+
+          accepted:
+            data.accepted,
+
+          answer:
+            data.answer
+        }
       );
 
-    if (!targetSocket)
-      return;
+    } catch(e) {
 
-    io.to(targetSocket)
-    .emit(
-      "call_response",
-      {
-        from: {
-          id:
-            from.id,
-          username:
-            from.username,
-          avatar:
-            from.avatar
-        },
-
-        to:
-          data.to,
-
-        accepted:
-          data.accepted,
-
-        answer:
-          data.answer
-      }
-    );
+      console.log(e);
+    }
   });
 
   socket.on(
     "ice_candidate",
     function(data) {
 
-    const from =
-      clients[socket.id];
+    try {
 
-    if (!from)
-      return;
+      const from =
+        clients[socket.id];
 
-    const targetSocket =
-      getSocketByUserId(
-        data.to
+      if (!from)
+        return;
+
+      const targetSocket =
+        getSocketByUserId(
+          data.to
+        );
+
+      if (!targetSocket)
+        return;
+
+      io.to(
+        targetSocket
+      ).emit(
+        "ice_candidate",
+        {
+          from:
+            from.id,
+
+          to:
+            data.to,
+
+          candidate:
+            data.candidate
+        }
       );
 
-    if (!targetSocket)
-      return;
+    } catch(e) {
 
-    io.to(targetSocket)
-    .emit(
-      "ice_candidate",
-      {
-        from:
-          from.id,
-
-        to:
-          data.to,
-
-        candidate:
-          data.candidate
-      }
-    );
+      console.log(e);
+    }
   });
 
   socket.on(
     "call_ended",
     function(data) {
 
-    const from =
-      clients[socket.id];
+    try {
 
-    if (!from)
-      return;
+      const from =
+        clients[socket.id];
 
-    const targetSocket =
-      getSocketByUserId(
-        data.to
+      if (!from)
+        return;
+
+      const targetSocket =
+        getSocketByUserId(
+          data.to
+        );
+
+      if (!targetSocket)
+        return;
+
+      io.to(
+        targetSocket
+      ).emit(
+        "call_ended",
+        {
+          from:
+            from.id,
+
+          to:
+            data.to
+        }
       );
 
-    if (!targetSocket)
-      return;
+    } catch(e) {
 
-    io.to(targetSocket)
-    .emit(
-      "call_ended",
-      {
-        from:
-          from.id,
-
-        to:
-          data.to
-      }
-    );
+      console.log(e);
+    }
   });
 
   socket.on(
@@ -701,7 +737,8 @@ app.get(
   function(req, res) {
 
   res.json({
-    status: "ok"
+    status:
+      "ok"
   });
 });
 
