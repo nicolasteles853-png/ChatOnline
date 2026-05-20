@@ -166,6 +166,12 @@
       font-size:17px;
       font-weight:bold;
       cursor:pointer;
+      transition:.2s;
+    }
+
+    button:disabled{
+      opacity:.7;
+      cursor:not-allowed;
     }
 
     .error{
@@ -173,6 +179,7 @@
       text-align:center;
       margin-bottom:15px;
       min-height:20px;
+      font-size:14px;
     }
 
   </style>
@@ -224,6 +231,7 @@
       id="usernameInput"
       placeholder="Digite seu nome"
       maxlength="20"
+      autocomplete="off"
     >
 
     <div
@@ -233,7 +241,6 @@
 
     <button
       id="loginBtn"
-      onclick="atualizarLogin()"
     >
       Continuar
     </button>
@@ -256,7 +263,9 @@ const socket = io({
   reconnectionDelay:
     1000,
 
-  timeout: 20000
+  timeout: 20000,
+
+  autoConnect: true
 });
 
 let userId =
@@ -280,6 +289,9 @@ let avatar =
   localStorage.getItem(
     "avatar"
   ) || "";
+
+let loginStarted =
+  false;
 
 const usernameInput =
   document.getElementById(
@@ -318,6 +330,21 @@ if (avatar) {
     avatar;
 }
 
+function setError(text) {
+
+  errorMsg.innerText =
+    text;
+}
+
+function resetButton() {
+
+  loginBtn.disabled =
+    false;
+
+  loginBtn.innerText =
+    "Continuar";
+}
+
 function atualizarAvatar() {
 
   const file =
@@ -331,8 +358,9 @@ function atualizarAvatar() {
     10 * 1024 * 1024
   ) {
 
-    errorMsg.innerText =
-      "Imagem muito grande";
+    setError(
+      "Imagem muito grande"
+    );
 
     return;
   }
@@ -355,6 +383,14 @@ function atualizarAvatar() {
     );
   };
 
+  reader.onerror =
+    function() {
+
+    setError(
+      "Erro ao carregar imagem"
+    );
+  };
+
   reader.readAsDataURL(
     file
   );
@@ -368,6 +404,10 @@ avatarFile
 
 function atualizarLogin() {
 
+  if (
+    loginStarted
+  ) return;
+
   username =
     usernameInput
     .value
@@ -375,8 +415,9 @@ function atualizarLogin() {
 
   if (!username) {
 
-    errorMsg.innerText =
-      "Digite um nome";
+    setError(
+      "Digite um nome"
+    );
 
     return;
   }
@@ -385,11 +426,15 @@ function atualizarLogin() {
     username.length < 2
   ) {
 
-    errorMsg.innerText =
-      "Nome muito curto";
+    setError(
+      "Nome muito curto"
+    );
 
     return;
   }
+
+  loginStarted =
+    true;
 
   loginBtn.disabled =
     true;
@@ -397,8 +442,7 @@ function atualizarLogin() {
   loginBtn.innerText =
     "Entrando...";
 
-  errorMsg.innerText =
-    "";
+  setError("");
 
   avatar =
     avatarImg.src;
@@ -418,20 +462,72 @@ function atualizarLogin() {
     avatar
   );
 
-  socket.emit(
-    "login",
-    {
-      id:
-        userId,
+  if (
+    socket.connected
+  ) {
 
-      username:
-        username,
+    socket.emit(
+      "login",
+      {
+        id:
+          userId,
 
-      avatar:
-        avatar
-    }
-  );
+        username:
+          username,
+
+        avatar:
+          avatar
+      }
+    );
+
+  } else {
+
+    socket.connect();
+
+    setTimeout(
+      function() {
+
+        if (
+          socket.connected
+        ) {
+
+          socket.emit(
+            "login",
+            {
+              id:
+                userId,
+
+              username:
+                username,
+
+              avatar:
+                avatar
+            }
+          );
+
+        } else {
+
+          loginStarted =
+            false;
+
+          resetButton();
+
+          setError(
+            "Servidor offline"
+          );
+        }
+
+      },
+      2000
+    );
+  }
 }
+
+loginBtn.onclick =
+  function() {
+
+  atualizarLogin();
+};
 
 usernameInput
 .addEventListener(
@@ -451,8 +547,18 @@ socket.on(
   "connect",
   function() {
 
-    errorMsg.innerText =
-      "";
+    setError("");
+  }
+);
+
+socket.on(
+  "disconnect",
+  function() {
+
+    loginStarted =
+      false;
+
+    resetButton();
   }
 );
 
@@ -460,20 +566,20 @@ socket.on(
   "connect_error",
   function() {
 
-    loginBtn.disabled =
+    loginStarted =
       false;
 
-    loginBtn.innerText =
-      "Continuar";
+    resetButton();
 
-    errorMsg.innerText =
-      "Servidor offline";
+    setError(
+      "Servidor offline"
+    );
   }
 );
 
 socket.on(
   "auth_success",
-  function() {
+  function(data) {
 
     window.location.href =
       "/chat";
@@ -484,16 +590,37 @@ socket.on(
   "auth_error",
   function(data) {
 
-    loginBtn.disabled =
+    loginStarted =
       false;
 
-    loginBtn.innerText =
-      "Continuar";
+    resetButton();
 
-    errorMsg.innerText =
+    setError(
       data.message ||
-      "Erro ao entrar";
+      "Erro ao entrar"
+    );
   }
+);
+
+setTimeout(
+  function() {
+
+    if (
+      loginStarted
+    ) {
+
+      loginStarted =
+        false;
+
+      resetButton();
+
+      setError(
+        "Tempo esgotado"
+      );
+    }
+
+  },
+  15000
 );
 
 </script>
